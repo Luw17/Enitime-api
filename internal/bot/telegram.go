@@ -78,6 +78,15 @@ func (s *Service) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func buildWebAppButton(text, url string) map[string]any {
+	return map[string]any{
+		"text": text,
+		"web_app": map[string]string{
+			"url": url,
+		},
+	}
+}
+
 func (s *Service) handleTelegramMessage(w http.ResponseWriter, r *http.Request, message *telegramMessage) {
 	chatID := strings.TrimSpace(message.Chat.ID.String())
 	text := strings.TrimSpace(message.Text)
@@ -97,14 +106,14 @@ func (s *Service) handleTelegramMessage(w http.ResponseWriter, r *http.Request, 
 	switch {
 	case strings.HasPrefix(text, "/registrar"):
 		_ = s.sendTelegramMessage(r.Context(), chatID, "Clique no botão abaixo para preencher as informações da sua loja e concluir o cadastro:", "", map[string]any{
-			"inline_keyboard": [][]map[string]string{{
-				{"text": "📝 Concluir Cadastro da Loja", "web_app": "https://admin.luw17.online/telegram-cadastro"},
+			"inline_keyboard": [][]map[string]any{{
+				buildWebAppButton("📝 Concluir Cadastro da Loja", "https://admin.luw17.online/telegram-cadastro"),
 			}},
 		})
 	case strings.HasPrefix(text, "/buscar"):
 		_ = s.sendTelegramMessage(r.Context(), chatID, "Para fazer a busca aperte o botão abaixo", "", map[string]any{
-			"inline_keyboard": [][]map[string]string{{
-				{"text": "Buscar", "web_app": "https://admin.luw17.online/busca"},
+			"inline_keyboard": [][]map[string]any{{
+				buildWebAppButton("Buscar", "https://admin.luw17.online/busca"),
 			}},
 		})
 	case strings.HasPrefix(text, "/ajuda"):
