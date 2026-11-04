@@ -64,14 +64,14 @@ func (api *API) handleTelegramMessage(w http.ResponseWriter, r *http.Request, me
 	switch {
 	case strings.HasPrefix(text, "/registrar"):
 		_ = api.sendTelegramMessage(r.Context(), chatID, "Clique no botão abaixo para preencher as informações da sua loja e concluir o cadastro:", "", map[string]any{
-			"inline_keyboard": [][]map[string]string{{
-				{"text": "📝 Concluir Cadastro da Loja", "web_app": "https://admin.luw17.online/telegram-cadastro"},
+			"inline_keyboard": [][]map[string]any{{
+				{"text": "📝 Concluir Cadastro da Loja", "web_app": map[string]string{"url": "https://admin.luw17.online/telegram-cadastro"}},
 			}},
 		})
 	case strings.HasPrefix(text, "/buscar"):
 		_ = api.sendTelegramMessage(r.Context(), chatID, "Para fazer a busca aperte o botão abaixo", "", map[string]any{
-			"inline_keyboard": [][]map[string]string{{
-				{"text": "Buscar", "web_app": "https://admin.luw17.online/busca"},
+			"inline_keyboard": [][]map[string]any{{
+				{"text": "Buscar", "web_app": map[string]string{"url": "https://admin.luw17.online/busca"}},
 			}},
 		})
 	case strings.HasPrefix(text, "/ajuda"):
