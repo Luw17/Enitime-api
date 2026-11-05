@@ -253,6 +253,20 @@ func TestPrincipalOwnsID(t *testing.T) {
 	}
 }
 
+func TestContactPayload(t *testing.T) {
+	got := contactPayload("Loja Alpha", "11999999999", "5511999999999", "loja@example.com")
+	if got == nil {
+		t.Fatal("contactPayload() returned nil")
+	}
+	if got["nome"] != "Loja Alpha" || got["telefone"] != "11999999999" || got["whatsapp_id"] != "5511999999999" || got["email"] != "loja@example.com" {
+		t.Fatalf("contactPayload() = %#v, want full contact info", got)
+	}
+
+	if got := contactPayload(nil, nil, nil, nil); got != nil {
+		t.Fatalf("contactPayload() with empty values = %#v, want nil", got)
+	}
+}
+
 func boolPointer(value bool) *bool {
 	return &value
 }

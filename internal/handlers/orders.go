@@ -238,8 +238,19 @@ func (api *API) checkout(w http.ResponseWriter, r *http.Request) {
 		)
 		LEFT JOIN comprador c ON TRUE
 		WHERE ef.quantidade >= i.quantidade
-		RETURNING id, comprador_chat_id, fornecedor_id, estoque_id, quantidade,
-			observacao, distancia_km, descricao_peca, status, criado_em
+		RETURNING
+			id, comprador_chat_id, fornecedor_id, estoque_id, quantidade,
+			observacao, distancia_km, descricao_peca, status, criado_em,
+			COALESCE(u.nome_loja, u.nome) AS fornecedor_nome,
+			u.telefone AS fornecedor_telefone,
+			u.whatsapp_id AS fornecedor_whatsapp_id,
+			u.email AS fornecedor_email,
+			json_build_object(
+				'nome', COALESCE(u.nome_loja, u.nome),
+				'telefone', u.telefone,
+				'whatsapp_id', u.whatsapp_id,
+				'email', u.email
+			) AS fornecedor_contato
 	`, chatID, string(itemsJSON), ptrValue(generalObservation))
 	if err != nil {
 		log.Printf("insert checkout orders: %v", err)
@@ -247,6 +258,7 @@ func (api *API) checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	unprocessed := len(items) - len(rows)
+	rows = enrichOrdersWithContacts(rows, "fornecedor_nome", "fornecedor_telefone", "fornecedor_whatsapp_id", "fornecedor_email", "fornecedor_contato")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"sucesso":                              true,
 		"mensagem":                             "Processamento de checkout concluído.",
@@ -255,6 +267,49 @@ func (api *API) checkout(w http.ResponseWriter, r *http.Request) {
 		"itens_nao_processados_ou_sem_estoque": unprocessed,
 		"pedidos":                              rows,
 	})
+}
+
+func enrichOrdersWithContacts(rows []map[string]any, nameKey, phoneKey, whatsappKey, emailKey, contactKey string) []map[string]any {
+	for _, row := range rows {
+		if row == nil {
+			continue
+		}
+		if _, exists := row[contactKey]; !exists || row[contactKey] == nil {
+			row[contactKey] = contactPayload(row[nameKey], row[phoneKey], row[whatsappKey], row[emailKey])
+		}
+	}
+	return rows
+}
+
+func contactPayload(name, phone, whatsapp, email any) map[string]any {
+	payload := map[string]any{
+		"nome":       asString(name),
+		"telefone":   asString(phone),
+		"whatsapp_id": asString(whatsapp),
+		"email":      asString(email),
+	}
+	if payload["nome"] == "" && payload["telefone"] == "" && payload["whatsapp_id"] == "" && payload["email"] == "" {
+		return nil
+	}
+	return payload
+}
+
+func asString(value any) string {
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case []byte:
+		return strings.TrimSpace(string(v))
+	case fmt.Stringer:
+		return strings.TrimSpace(v.String())
+	case nil:
+		return ""
+	default:
+		if value == nil {
+			return ""
+		}
+		return strings.TrimSpace(fmt.Sprintf("%v", value))
+	}
 }
 
 func (api *API) getSupplierOrders(w http.ResponseWriter, r *http.Request) {
@@ -291,10 +346,22 @@ func (api *API) getSupplierOrders(w http.ResponseWriter, r *http.Request) {
 			SELECT
 				p.id, p.comprador_chat_id, p.fornecedor_id, p.estoque_id,
 				p.descricao_peca, p.quantidade, p.observacao, p.distancia_km,
-				p.status, p.criado_em, u.nome AS comprador_nome,
-				u.telefone AS comprador_telefone
+				p.status, p.criado_em,
+				u.nome AS comprador_nome,
+				u.telefone AS comprador_telefone,
+				u.whatsapp_id AS comprador_whatsapp_id,
+				u.email AS comprador_email,
+				json_build_object(
+					'nome', u.nome,
+					'telefone', u.telefone,
+					'whatsapp_id', u.whatsapp_id,
+					'email', u.email
+				) AS comprador_contato
 			FROM pedidos_pecas p
-			LEFT JOIN usuarios u ON u.telegram_chat_id = p.comprador_chat_id
+			LEFT JOIN usuarios u ON (
+				u.id::text = p.comprador_chat_id
+				OR (u.telegram_chat_id IS NOT NULL AND u.telegram_chat_id != '' AND u.telegram_chat_id = p.comprador_chat_id)
+			)
 			WHERE p.fornecedor_id = $1 AND ($2::text IS NULL OR p.status = $2)
 		),
 		total AS (

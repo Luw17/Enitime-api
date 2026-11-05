@@ -28,15 +28,32 @@ func (api *API) getOrders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := queryRows(r, api.db, `
-		SELECT * FROM pedidos_pecas
-		WHERE comprador_chat_id = $1
-		ORDER BY id DESC
+		SELECT
+			p.*, 
+			COALESCE(u.nome_loja, u.nome) AS loja_nome,
+			u.telefone AS loja_telefone,
+			u.whatsapp_id AS loja_whatsapp_id,
+			u.email AS loja_email,
+			json_build_object(
+				'nome', COALESCE(u.nome_loja, u.nome),
+				'telefone', u.telefone,
+				'whatsapp_id', u.whatsapp_id,
+				'email', u.email
+			) AS loja_contato
+		FROM pedidos_pecas p
+		LEFT JOIN usuarios u ON (
+			u.id::text = p.fornecedor_id
+			OR (u.telegram_chat_id IS NOT NULL AND u.telegram_chat_id != '' AND u.telegram_chat_id = p.fornecedor_id)
+		)
+		WHERE p.comprador_chat_id = $1
+		ORDER BY p.id DESC
 	`, userID)
 	if err != nil {
 		log.Printf("query purchaser orders: %v", err)
 		writeError(w, http.StatusInternalServerError, "Erro ao buscar pedidos.")
 		return
 	}
+	rows = enrichOrdersWithContacts(rows, "loja_nome", "loja_telefone", "loja_whatsapp_id", "loja_email", "loja_contato")
 	writeJSON(w, http.StatusOK, rows)
 }
 
