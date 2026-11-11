@@ -34,6 +34,7 @@ func (api *API) getOrders(w http.ResponseWriter, r *http.Request) {
 			u.telefone AS loja_telefone,
 			u.whatsapp_id AS loja_whatsapp_id,
 			u.email AS loja_email,
+			u.telegram_chat_id AS loja_telegram_chat_id,
 			json_build_object(
 				'nome', COALESCE(u.nome_loja, u.nome),
 				'telefone', u.telefone,
@@ -53,7 +54,7 @@ func (api *API) getOrders(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "Erro ao buscar pedidos.")
 		return
 	}
-	rows = enrichOrdersWithContacts(rows, "loja_nome", "loja_telefone", "loja_whatsapp_id", "loja_email", "loja_contato")
+	rows = enrichOrdersWithContacts(rows, "loja_nome", "loja_telefone", "loja_whatsapp_id", "loja_email", "loja_telegram_chat_id", "loja_contato")
 	writeJSON(w, http.StatusOK, rows)
 }
 

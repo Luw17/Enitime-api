@@ -247,6 +247,13 @@ func (api *API) checkout(w http.ResponseWriter, r *http.Request) {
             u.telefone AS fornecedor_telefone,
             u.whatsapp_id AS fornecedor_whatsapp_id,
             u.email AS fornecedor_email,
+            u.telegram_chat_id AS fornecedor_telegram_chat_id,
+            u.id::text AS loja_id,
+            ef.sku AS produto_sku,
+            ef.part_number AS produto_part_number,
+            ef.tipo_componente AS produto_tipo_componente,
+            ef.marca_qualidade AS produto_marca_qualidade,
+            ef.preco AS produto_preco,
             json_build_object(
                 'nome', COALESCE(u.nome_loja, u.nome),
                 'telefone', u.telefone,
@@ -258,6 +265,7 @@ func (api *API) checkout(w http.ResponseWriter, r *http.Request) {
             u.id::text = ins.fornecedor_id
             OR (u.telegram_chat_id IS NOT NULL AND u.telegram_chat_id != '' AND u.telegram_chat_id = ins.fornecedor_id)
         )
+        LEFT JOIN estoque_fornecedor ef ON ef.id = ins.estoque_id
     `, chatID, string(itemsJSON), ptrValue(generalObservation))
     if err != nil {
         log.Printf("insert checkout orders: %v", err)
@@ -265,7 +273,7 @@ func (api *API) checkout(w http.ResponseWriter, r *http.Request) {
         return
     }
     unprocessed := len(items) - len(rows)
-    rows = enrichOrdersWithContacts(rows, "fornecedor_nome", "fornecedor_telefone", "fornecedor_whatsapp_id", "fornecedor_email", "fornecedor_contato")
+    rows = enrichOrdersWithContacts(rows, "fornecedor_nome", "fornecedor_telefone", "fornecedor_whatsapp_id", "fornecedor_email", "fornecedor_telegram_chat_id", "fornecedor_contato")
     writeJSON(w, http.StatusOK, map[string]any{
         "sucesso":                              true,
         "mensagem":                             "Processamento de checkout concluído.",
@@ -273,17 +281,30 @@ func (api *API) checkout(w http.ResponseWriter, r *http.Request) {
         "total_pedidos_gerados":                len(rows),
         "itens_nao_processados_ou_sem_estoque": unprocessed,
         "pedidos":                              rows,
+        "contatos_fornecedores":                groupOrdersBySupplier(rows),
     })
 }
 
-func enrichOrdersWithContacts(rows []map[string]any, nameKey, phoneKey, whatsappKey, emailKey, contactKey string) []map[string]any {
+func enrichOrdersWithContacts(rows []map[string]any, nameKey, phoneKey, whatsappKey, emailKey, telegramKey, contactKey string) []map[string]any {
     for _, row := range rows {
         if row == nil {
             continue
         }
-        if _, exists := row[contactKey]; !exists || row[contactKey] == nil {
-            row[contactKey] = contactPayload(row[nameKey], row[phoneKey], row[whatsappKey], row[emailKey])
+        contact, _ := row[contactKey].(map[string]any)
+        if contact == nil {
+            contact = contactPayload(row[nameKey], row[phoneKey], row[whatsappKey], row[emailKey])
         }
+        if contact != nil {
+            telegram := asString(row[telegramKey])
+            if telegram != "" {
+                contact["telegram_chat_id"] = telegram
+            }
+            contact["links"] = contactLinks(
+                asString(contact["telefone"]), asString(contact["whatsapp_id"]),
+                asString(contact["email"]), telegram,
+            )
+        }
+        row[contactKey] = contact
     }
     return rows
 }
