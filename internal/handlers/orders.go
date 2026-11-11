@@ -197,7 +197,7 @@ func (api *API) checkout(w http.ResponseWriter, r *http.Request) {
 
     rows, err := queryRows(r, api.db, `
         WITH comprador AS (
-            SELECT latitude, longitude
+            SELECT latitude, longitude, telegram_chat_id
             FROM usuarios
             WHERE (telegram_chat_id = $1 OR id::text = $1)
                 AND status = 'aprovado'
@@ -254,6 +254,7 @@ func (api *API) checkout(w http.ResponseWriter, r *http.Request) {
             ef.tipo_componente AS produto_tipo_componente,
             ef.marca_qualidade AS produto_marca_qualidade,
             ef.preco AS produto_preco,
+            (SELECT telegram_chat_id FROM comprador) AS comprador_telegram_chat_id,
             json_build_object(
                 'nome', COALESCE(u.nome_loja, u.nome),
                 'telefone', u.telefone,
@@ -273,7 +274,13 @@ func (api *API) checkout(w http.ResponseWriter, r *http.Request) {
         return
     }
     unprocessed := len(items) - len(rows)
+    buyerChatID := takeBuyerChatID(rows)
     rows = enrichOrdersWithContacts(rows, "fornecedor_nome", "fornecedor_telefone", "fornecedor_whatsapp_id", "fornecedor_email", "fornecedor_telegram_chat_id", "fornecedor_contato")
+    suppliers := groupOrdersBySupplier(rows)
+    if len(rows) > 0 {
+        // Envio em segundo plano e sem afetar o checkout: os pedidos já foram criados.
+        go api.notifyBuyerCheckout(r.Context(), buyerChatID, buildCheckoutMessages(suppliers, unprocessed))
+    }
     writeJSON(w, http.StatusOK, map[string]any{
         "sucesso":                              true,
         "mensagem":                             "Processamento de checkout concluído.",
@@ -281,7 +288,7 @@ func (api *API) checkout(w http.ResponseWriter, r *http.Request) {
         "total_pedidos_gerados":                len(rows),
         "itens_nao_processados_ou_sem_estoque": unprocessed,
         "pedidos":                              rows,
-        "contatos_fornecedores":                groupOrdersBySupplier(rows),
+        "contatos_fornecedores":                suppliers,
     })
 }
 
